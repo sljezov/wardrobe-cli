@@ -10,10 +10,13 @@ import java.util.Set;
 public final class WardrobeCli {
     private final Wardrobe wardrobe;
     private final Scanner input;
+    private final OutfitGenerator generator;
+    private Outfit lastOutfit;
 
     public WardrobeCli(Wardrobe wardrobe, Scanner input) {
         this.wardrobe = wardrobe;
         this.input = input;
+        this.generator = new OutfitGenerator(wardrobe);
     }
 
     public void run() {
@@ -22,9 +25,10 @@ public final class WardrobeCli {
             boolean running = true;
             while (running) {
                 System.out.println("\n1. Add clothing\n2. List clothing (sorted by name)\n3. Search name or color"
-                        + "\n4. Filter by category\n5. Suggest clothing for the weather\n6. Remove clothing\n0. Exit");
+                        + "\n4. Filter by category\n5. Suggest clothing for the weather\n6. Remove clothing"
+                        + "\n7. Generate outfit\n8. Save last outfit as favorite\n9. View favorite outfits\n0. Exit");
                 try {
-                    switch (readInt("Choose an option: ", 0, 6)) {
+                    switch (readInt("Choose an option: ", 0, 9)) {
                         case 1 -> addClothing();
                         case 2 -> show(wardrobe.listByName(), false);
                         case 3 -> show(wardrobe.search(readText("Search: ")), false);
@@ -32,11 +36,14 @@ public final class WardrobeCli {
                         case 5 -> suggest();
                         case 6 -> System.out.println(wardrobe.remove(readInt("Item ID: ", 1, Integer.MAX_VALUE))
                                 ? "Item removed." : "No item with that ID.");
+                        case 7 -> generateOutfit();
+                        case 8 -> saveFavorite();
+                        case 9 -> showFavorites();
                         case 0 -> running = false;
                         default -> throw new IllegalStateException("Unexpected menu option.");
                     }
                 } catch (IllegalArgumentException exception) {
-                    System.out.println("Could not add item: " + exception.getMessage());
+                    System.out.println("Could not complete action: " + exception.getMessage());
                 }
             }
         } catch (EndOfInputException exception) {
@@ -75,6 +82,48 @@ public final class WardrobeCli {
                 // Dynamic dispatch: the concrete subclass provides its own advice.
                 System.out.println("  " + item.getWearAdvice());
             }
+        }
+    }
+
+    private void generateOutfit() {
+        // Clear the previous result so a failed generation cannot save an old outfit by mistake.
+        lastOutfit = null;
+        Season season = readEnum("Season", Season.class);
+        Weather weather = readEnum("Weather", Weather.class);
+        int temperature = readInt("Temperature (C): ", -60, 60);
+        try {
+            lastOutfit = generator.generate(season, weather, temperature);
+            showOutfit(lastOutfit);
+            System.out.println("Choose 8 to save this outfit as a favorite.");
+        } catch (IllegalStateException exception) {
+            System.out.println("Could not generate outfit. " + exception.getMessage());
+        }
+    }
+
+    private void saveFavorite() {
+        if (lastOutfit == null) {
+            System.out.println("Generate an outfit first (option 7).");
+            return;
+        }
+        wardrobe.saveFavorite(readText("Favorite outfit name: "), lastOutfit);
+        System.out.println("Favorite saved for this session.");
+    }
+
+    private void showFavorites() {
+        List<Outfit> favorites = wardrobe.getFavorites();
+        if (favorites.isEmpty()) {
+            System.out.println("No favorite outfits yet.");
+        }
+        for (Outfit outfit : favorites) {
+            showOutfit(outfit);
+        }
+    }
+
+    private void showOutfit(Outfit outfit) {
+        System.out.println("\nOUTFIT: " + outfit.getName());
+        for (ClothingItem item : outfit.getItems()) {
+            System.out.println("  " + item.getCategory() + ": " + item.getColor() + " " + item.getName());
+            System.out.println("    " + item.getWearAdvice());
         }
     }
 
